@@ -3,6 +3,7 @@ services:
 - type: web
   name: smart-complaint-backend
   runtime: node
+  plan: free
   region: oregon
   rootDir: backend
   buildCommand: npm install
@@ -34,4 +35,5 @@ services:
         type: web
         name: smart-complaint-backend
         envVarKey: RENDER_EXTERNAL_URL
+Pressing key...Agent needs your inputStopping...
 

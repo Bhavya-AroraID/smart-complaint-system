@@ -1,7 +1,7 @@
 const Complaint = require('../models/Complaint');
 
-// AI Analysis Engine - Smart rule-based classifier
-const analyzeComplaint = (title, description, category) => {
+// Rule-based fallback classifier
+const analyzeComplaintRuleBased = (title, description, category) => {
   const text = `${title} ${description}`.toLowerCase();
 
   // ========== 1. PRIORITY DETECTION ==========
@@ -80,7 +80,6 @@ const analyzeComplaint = (title, description, category) => {
   if (sentences.length <= 2) {
     summary = description;
   } else {
-    // Take first two sentences as summary
     summary = sentences.slice(0, 2).map(s => s.trim()).join('. ') + '.';
   }
 
@@ -104,8 +103,80 @@ const analyzeComplaint = (title, description, category) => {
     department,
     summary,
     autoResponse,
-    analyzedAt: new Date()
+    analyzedAt: new Date(),
+    method: 'Local Rule-Based Engine (Offline)'
   };
+};
+
+// OpenRouter AI Analyzer
+const analyzeComplaintWithAI = async (title, description, category) => {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    console.log('OPENROUTER_API_KEY not configured. Falling back to Rule-Based Engine.');
+    return analyzeComplaintRuleBased(title, description, category);
+  }
+
+  try {
+    const prompt = `You are the AI Engine of a Smart Complaint Management System. Analyze this citizen complaint:
+    
+Title: "${title}"
+Category: "${category}"
+Description: "${description}"
+
+Provide your analysis strictly in the following JSON format:
+{
+  "priority": "Critical" | "High" | "Medium" | "Low",
+  "priorityScore": <integer between 1 and 100>,
+  "department": "<Recommended municipal department to solve this>",
+  "summary": "<A concise 1-2 sentence summary of the core issue>",
+  "autoResponse": "<A polite, professional, and reassuring auto-acknowledgement response to the citizen from the recommended department>"
+}
+
+Ensure the response contains ONLY the valid JSON block. Do not write any markdown codeblock backticks or introductory text.`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/Bhavya-AroraID/smart-complaint-system',
+        'X-Title': 'Smart Complaint System'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter API responded with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    let content = data.choices[0].message.content.trim();
+
+    // In case the model wraps the output in ```json...```
+    if (content.startsWith('```')) {
+      content = content.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+    }
+
+    const parsedResult = JSON.parse(content);
+
+    return {
+      priority: parsedResult.priority || 'Medium',
+      priorityScore: parsedResult.priorityScore || 50,
+      department: parsedResult.department || 'General Administration Department',
+      summary: parsedResult.summary || description.substring(0, 150),
+      autoResponse: parsedResult.autoResponse || 'We have received your complaint and are looking into it.',
+      analyzedAt: new Date(),
+      method: 'Google Gemini 2.5 Flash (via OpenRouter)'
+    };
+
+  } catch (error) {
+    console.error('Error in OpenRouter AI analysis, falling back:', error.message);
+    return analyzeComplaintRuleBased(title, description, category);
+  }
 };
 
 // @desc    Analyze a complaint using AI
@@ -121,7 +192,7 @@ const analyzeComplaintAPI = async (req, res, next) => {
       });
     }
 
-    const analysis = analyzeComplaint(title, description, category);
+    const analysis = await analyzeComplaintWithAI(title, description, category);
 
     // If complaintId is provided, update the complaint with AI analysis
     if (complaintId) {

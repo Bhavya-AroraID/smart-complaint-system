@@ -30,10 +30,9 @@ services:
       source: /*
       destination: /index.html
   envVars:
-    - key: VITE_API_URL
-      fromService:
-        type: web
-        name: smart-complaint-backend
-        envVarKey: RENDER_EXTERNAL_URL
-Pressing key...Agent needs your inputStopping...
+  - key: VITE_API_URL
+    fromService:
+      type: web
+      name: smart-complaint-backend
+      envVarKey: RENDER_EXTERNAL_URL
 
